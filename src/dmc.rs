@@ -181,7 +181,14 @@ pub trait McNode: Copy + Send + Sync {
     /// The gradient of a SDF is its derivative. However, if you don't want to calculate it (Which
     /// you won't, because it will get complex really quickly), you can approximate it with the
     /// following formula:
-    /// ```ignore
+    /// ```rust
+    /// use cgmath::*;
+    ///
+    /// fn sdf(pos: Point3<f32>) -> f32 {
+    ///     // Calculate SDF here...
+    ///     pos.distance(point3(0.,0.,0.)) - 0.4
+    /// }
+    ///
     /// pub fn sdf_gradient(pos: Point3<f32>) -> Vector3<f32> {
     ///     vec3(
     ///        sdf(point3(pos.x + f32::EPSILON, pos.y, pos.z))
