@@ -1,21 +1,15 @@
 //! Contains the Dual Marching Cubes implementation, along with a function
-//! ([`dmc::dmc::mesh_from_octree`]) to interface with it.
+//! ([`mesh_from_octree`]) to interface with it.
 //!
 //! # Explanation
 //! The goal here is to adapt the Marching Cubes algorithm to hashed octrees using Morton keys.
-//! The original Marching Cubes algorithm used an uniform grid to generate the final mesh. However,
-//! with this approach, we use the dual grid generated from the octree given. The dual grid is
-//! composed of vertices (One at the center of each leaf node) and edges, which connect vertices of
-//! adjacent leaves.
-//!
-//! # Visual Example
-//! Simplified in a quadtree, https://imgur.com/7YJrNLK
-//!
-//! # Possible Implementation
-//! Simplified in a quadtree; not pretty code: https://editor.p5js.org/alexinfdev/sketches/4I0506NqA
+//! The [original Marching Cubes algorithm](http://paulbourke.net/geometry/polygonise/) used an
+//! uniform grid to generate the final mesh. However, with this approach, we use the dual grid
+//! generated from the octree given. The dual grid is composed of vertices (One at the center of
+//! each leaf node) and edges, which connect vertices of adjacent leaves.
 //!
 //! # References
-//! Refer to the comments at the start of [`src/lib.rs`].
+//! Refer to the comments at the start of [`src/lib.rs`](https://github.com/alexdevteam/dmc/blob/main/src/lib.rs).
 
 use crate::duals::DualGrid;
 use crate::octree::*;

@@ -1,5 +1,5 @@
-//! Contains the container for the mesh generation [`dmc::octree::HashedOctree`], which relies on
-//! [`dmc::octree::MortonKey`] for indexing.
+//! Contains the container for the mesh generation [`HashedOctree`], which relies on
+//! [`MortonKey`] for indexing.
 
 use ahash::RandomState;
 use bitflags::bitflags;

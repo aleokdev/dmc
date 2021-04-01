@@ -1,9 +1,19 @@
 //! Defines the dual grid generation for a given octree with the [`DualGrid::from_octree`] function.
+//!
+//! For more information about what is a dual grid, check out the [`DualGrid`] struct.
 
 use crate::octree::*;
 use rayon::prelude::*;
 
 /// Type that defines a grid made from the dual edges of an octree.
+///
+/// # Visual Example
+/// [Here's an example simplified in a quadtree.](https://imgur.com/7YJrNLK)
+///
+/// # Possible Implementation
+/// [Here's a possible implementation simplified in a quadtree](https://editor.p5js.org/alexinfdev/sketches/4I0506NqA),
+/// without comments or nice code: It's meant mostly as a visual guide of what the dual grid looks
+/// like.
 pub struct DualGrid {
     /// The cells or volumes that make up this dual grid.
     /// Each one is composed by, at most, 8 different dual vertices.
@@ -20,7 +30,7 @@ impl DualGrid {
     /// Constructs a dual grid from a given octree.
     /// You won't require to create an object of this type yourself unless you plan on processing
     /// the duals. If you want to generate a mesh from an octree, use
-    /// [`dmc::dmc::mesh_from_octree`].
+    /// [`crate::dmc::mesh_from_octree`].
     /// # Example
     /// ```rust
     /// use dmc::octree::*;
