@@ -2,7 +2,6 @@
 name = "dmc"
 version = "0.1.0"
 authors = ["aleok <aleok.inf@gmail.com>"]
-license = "MIT"
 license-file = "LICENSE.md"
 description = "An implementation of Dual Marching Cubes (DMC), along with an efficient octree structure"
 repository = "https://github.com/alexdevteam/dmc"
