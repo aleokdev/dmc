@@ -1,4 +1,4 @@
-# DMC
+# Sampled DMC
 This crate defines a fast implementation for the [Dual Marching Cubes technique](https://www.cs.rice.edu/~jwarren/papers/dmc.pdf),
 also known as Linear Hashed Marching Cubes, along with a concurrent octree structure for storing node data.
 
