@@ -1,12 +1,19 @@
+//! Contains the container for the mesh generation [`dmc::octree::HashedOctree`], which relies on
+//! [`dmc::octree::MortonKey`] for indexing.
+
 use ahash::RandomState;
 use bitflags::bitflags;
 use cgmath::*;
 use dashmap::{mapref::one::*, DashMap};
 
 bitflags! {
+    /// Indicates a node for when indexing an octree for any of its children.
     pub struct OctreeIndex : u8 {
+        /// Index +X (1) or -X (0).
         const RIGHT = 1 << 0;
+        /// Index +Y (1) or -Y (0).
         const TOP = 1 << 1;
+        /// Index +Z (1) or -Z (0).
         const FOREMOST = 1 << 2;
     }
 }
@@ -174,6 +181,7 @@ pub struct HashedOctree<T: Copy> {
 }
 
 impl<T: Copy> HashedOctree<T> {
+    /// Creates a new hashed octree, with a value for the root node.
     pub fn new(root_value: T) -> Self {
         Self {
             values: {
@@ -184,14 +192,27 @@ impl<T: Copy> HashedOctree<T> {
         }
     }
 
+    /// Returns a reference to a node if it exists.
+    ///
+    /// # Concurrent Behaviour
+    /// May deadlock if called when holding a mutable reference into the octree.
     pub fn value(&self, key: MortonKey) -> Option<Ref<'_, MortonKey, T, RandomState>> {
         self.values.get(&key)
     }
 
+    /// Returns a mutable reference to a node if it exists.
+    ///
+    /// # Concurrent Behaviour
+    /// May deadlock if called when holding any sort of reference into the octree.
     pub fn value_mut(&mut self, key: MortonKey) -> Option<RefMut<'_, MortonKey, T, RandomState>> {
         self.values.get_mut(&key)
     }
 
+    /// Subdivides a node and returns an iterator over its newly created children.
+    /// The value of the children will be copied from the parent.
+    ///
+    /// # Panics
+    /// Panics if the node passed is already subdivided.
     pub fn subdivide(&mut self, key: MortonKey) -> impl std::iter::Iterator<Item = MortonKey> {
         assert!(
             !self.is_subdivided(key),
@@ -213,6 +234,8 @@ impl<T: Copy> HashedOctree<T> {
         vec.into_iter()
     }
 
+    /// Returns an iterator over the children of a node, or None if the children (or parent) don't
+    /// exist.
     pub fn children(&self, key: MortonKey) -> Option<impl std::iter::Iterator<Item = MortonKey>> {
         if self.is_subdivided(key) {
             Some((0..8).into_iter().map(move |child| {
@@ -224,15 +247,21 @@ impl<T: Copy> HashedOctree<T> {
         }
     }
 
+    /// Returns true if a node exists.
     pub fn node_exists(&self, key: MortonKey) -> bool {
         self.values.contains_key(&key)
     }
 
+    /// Returns true if the children of a node exists.
+    ///
+    /// # Panics
+    /// Panics if the level of the key given is equal to the maximum level possible.
     pub fn is_subdivided(&self, key: MortonKey) -> bool {
         self.values.contains_key(&(key.child(OctreeIndex::empty())))
     }
 
-    /// Finds all the leaf nodes belonging to `parent`.
+    /// Finds all the leaf nodes belonging to `parent` and returns a vector with a key for each of
+    /// them.
     pub fn leaves(&self, parent: MortonKey) -> Vec<MortonKey> {
         let mut leaves = Vec::with_capacity(128);
         let mut to_process = Vec::with_capacity(64);
@@ -251,6 +280,7 @@ impl<T: Copy> HashedOctree<T> {
         leaves
     }
 
+    /// Returns the total node count, including leaf and branch nodes.
     pub fn node_count(&self) -> usize {
         self.values.len()
     }
