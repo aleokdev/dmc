@@ -1,9 +1,9 @@
 [package]
-name = "dmc"
+name = "sampled-dmc"
 version = "0.1.0"
 authors = ["aleok <aleok.inf@gmail.com>"]
 license-file = "LICENSE.md"
-description = "An implementation of Dual Marching Cubes (DMC), along with an efficient octree structure"
+description = "An implementation of Dual Marching Cubes (DMC) for already sampled data"
 repository = "https://github.com/alexdevteam/dmc"
 keywords = ["graphics", "mesh", "marching-cubes", "isosurface", "octree"]
 edition = "2018"
