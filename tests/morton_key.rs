@@ -3,7 +3,7 @@ use cgmath::Point3;
 
 #[test]
 fn node_positions() {
-    assert_eq!(MortonKey(0b0).position(), Point3::new(0., 0., 0.));
+    assert_eq!(MortonKey(0b1).position(), Point3::new(0., 0., 0.));
     assert_eq!(MortonKey(0b1_111).position(), Point3::new(0.5, 0.5, 0.5));
     assert_eq!(
         MortonKey(0b1_111_010).position(),

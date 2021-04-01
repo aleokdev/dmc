@@ -1,5 +1,5 @@
 use cgmath::Vector3;
-use dmc::McNode;
+use dmc::prelude::*;
 
 #[derive(Clone, Copy)]
 pub struct Node {

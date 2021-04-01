@@ -61,26 +61,30 @@ impl MortonKey {
         Self(self.0 >> 3)
     }
 
+    /// Returns a child of the node this key is pointing to.
+    /// # Panics
+    /// Panics if the level of this key is equal to the maximum level possible.
     pub fn child(self, index: OctreeIndex) -> Self {
+        assert!(self.level() < Self::max_level());
         Self(self.0 << 3 | index.bits as u64)
     }
 
-    /// Returns the level or depth of this node, where 1 is the root node.
+    /// Returns the level or depth of this node, where 0 is the root node.
+    /// # Panics
+    /// Panics if this is a Morton key pointing to no node.
     pub fn level(self) -> u32 {
-        if self.0 == 0 {
-            // This is a null key
-            0
-        } else {
-            (63 - self.0.leading_zeros()) / 3
-        }
+        assert_ne!(self.0, 0);
+        (63 - self.0.leading_zeros()) / 3
     }
 
+    /// Returns the maximum depth of the nodes that this type can point to.
     pub const fn max_level() -> u32 {
         63 / 3
     }
 
-    /// Returns the position of the center of the node this belongs to.
-    /// All axis are in the `(0, 1)` interval.
+    /// Returns the position of the center of the node this key is pointing to.
+    /// All axis are in the (0, 1) interval.
+    ///
     pub fn position(self) -> Point3<f32> {
         let (mut x, mut y, mut z) = (0, 0, 0);
         let level = self.level();
@@ -105,6 +109,10 @@ impl MortonKey {
         )
     }
 
+    /// Returns the Morton key with level `level` of an octree of bounds \[-1]³ to \[1]³ which is
+    /// closest to the position `position`.
+    /// # Panics
+    /// Panics if `level < Self::max_level()`.
     pub fn closest_to_position(position: Point3<f32>, level: u32) -> Self {
         assert!(level < Self::max_level());
 
@@ -146,6 +154,7 @@ impl MortonKey {
 }
 
 /// A hashed (linear) octree implementation which uses [`MortonKey`] for indexing.
+/// This type supports concurrent access and uses a fast hashing algorithm for best performance.
 /// # Example
 /// ```rust
 /// use dmc::octree::*;
