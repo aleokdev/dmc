@@ -110,8 +110,8 @@ pub trait McNode: Copy + Send + Sync {
 }
 
 struct CellVertexData {
-    pub positions: [[f32; 3]; 12],
-    pub normals: [[f32; 3]; 12],
+    pub positions: [Point3<f32>; 12],
+    pub normals: [Vector3<f32>; 12],
 }
 
 fn obtain_mc_vertices(
@@ -123,9 +123,9 @@ fn obtain_mc_vertices(
         .take_while(|chunk| chunk[0] != -1)
         .flat_map(move |chunk| {
             let (vtx1, vtx2, vtx3) = (
-                Point3::from(cell_data.positions[chunk[0] as usize]),
-                Point3::from(cell_data.positions[chunk[1] as usize]),
-                Point3::from(cell_data.positions[chunk[2] as usize]),
+                cell_data.positions[chunk[0] as usize],
+                cell_data.positions[chunk[1] as usize],
+                cell_data.positions[chunk[2] as usize],
             );
             let (n1, n2, n3) = (
                 cell_data.normals[chunk[0] as usize],
@@ -174,8 +174,8 @@ fn calculate_mc_vertex_data(
         (0, 2),
     ];
 
-    let mut positions: [[f32; 3]; 12] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
-    let mut normals: [[f32; 3]; 12] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+    let mut positions: [Point3<f32>; 12] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+    let mut normals: [Vector3<f32>; 12] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
     let edges = tables::EDGE_TABLE[cube_index as usize];
 
     (0..12)
