@@ -43,10 +43,11 @@ pub fn mesh_from_octree<T: McNode>(octree: &HashedOctree<T>, scale: f32) -> Mesh
         .flat_map_iter(|(cell_data, cube_index)| obtain_mc_vertices(cell_data, cube_index))
         .collect::<Vec<_>>();
 
-    Mesh {
-        indices: (0..vertices.len() as u32).collect(),
-        vertices,
-    }
+    // Since the algorithm doesn't merge vertices yet, the indices to use are just the items in
+    // the `vertices` vector incrementally.
+    let indices = (0..vertices.len() as u32).collect();
+
+    Mesh { indices, vertices }
 }
 
 /// A simple mesh type that holds a vector of vertices and another one of indices.
