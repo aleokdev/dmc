@@ -27,8 +27,73 @@ use std::mem::MaybeUninit;
 pub fn mesh_from_octree<T: McNode>(octree: &HashedOctree<T>, scale: f32) -> Mesh {
     let dual = DualGrid::from_octree(octree);
 
+    // Let's process the dual volumes one by one, concurrently.
+    let vertices = dual
+        .volumes
+        .into_par_iter()
+        .map(|volume| {
+            let (nodes, cube_index) = fetch_volume_information(volume, &octree);
+            (volume, nodes, cube_index)
+        })
+        .filter(|(_, _, cube_index)| is_cell_visible(*cube_index))
+        .map(|(volume, nodes, cube_index)| {
+            let cell_data = calculate_mc_vertex_data(volume, nodes, cube_index, scale);
+            (cell_data, cube_index)
+        })
+        .flat_map_iter(|(cell_data, cube_index)| obtain_mc_vertices(cell_data, cube_index))
+        .collect::<Vec<_>>();
+
+    Mesh {
+        indices: (0..vertices.len() as u32).collect(),
+        vertices,
+    }
+}
+
+struct NodeData {
+    pub density: f32,
+    pub normal: Vector3<f32>,
+}
+
+struct CellVertexData {
+    pub positions: [[f32; 3]; 12],
+    pub normals: [[f32; 3]; 12],
+}
+
+fn obtain_mc_vertices(
+    cell_data: CellVertexData,
+    cube_index: u8,
+) -> impl std::iter::Iterator<Item = Vertex> {
+    tables::TRI_TABLE[cube_index as usize]
+        .chunks(3)
+        .take_while(|chunk| chunk[0] != -1)
+        .flat_map(move |chunk| {
+            let (vtx1, vtx2, vtx3) = (
+                Point3::from(cell_data.positions[chunk[0] as usize]),
+                Point3::from(cell_data.positions[chunk[1] as usize]),
+                Point3::from(cell_data.positions[chunk[2] as usize]),
+            );
+            let (n1, n2, n3) = (
+                cell_data.normals[chunk[0] as usize],
+                cell_data.normals[chunk[1] as usize],
+                cell_data.normals[chunk[2] as usize],
+            );
+
+            std::array::IntoIter::new([(vtx1, n1), (vtx2, n2), (vtx3, n3)]).map(
+                move |(vtx, norm)| Vertex {
+                    position: vtx.into(),
+                    normal: norm.into(),
+                },
+            )
+        })
+}
+
+fn calculate_mc_vertex_data(
+    volume: [MortonKey; 8],
+    nodes: [NodeData; 8],
+    cube_index: u8,
+    vertex_position_scale: f32,
+) -> CellVertexData {
     /// Bindings from volume vertex (index) to Marching Cubes corner vertex (item).
-    const VOLUME_TO_MC_VERTEX: [usize; 8] = [3, 2, 7, 6, 0, 1, 4, 5];
     const MC_CUBE_EDGES: [(usize, usize); 12] = [
         (4, 5),
         (1, 5),
@@ -44,112 +109,71 @@ pub fn mesh_from_octree<T: McNode>(octree: &HashedOctree<T>, scale: f32) -> Mesh
         (0, 2),
     ];
 
-    struct NodeData {
-        density: f32,
-        normal: Vector3<f32>,
-    }
+    let mut positions: [[f32; 3]; 12] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+    let mut normals: [[f32; 3]; 12] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+    let edges = tables::EDGE_TABLE[cube_index as usize];
 
-    let vertices = dual
-        // Let's process the dual volumes one by one, concurrently.
-        .volumes
-        .into_par_iter()
-        // First, fetch the node information (density and normals) and the marching cubes cube
-        // index for each volume.
-        .map(|volume| {
-            let mut nodes: [MaybeUninit<NodeData>; 8] =
-                unsafe { MaybeUninit::uninit().assume_init() };
+    (0..12)
+        .into_iter()
+        .filter(|i| (edges & (1 << i)) > 0)
+        .for_each(|i| {
+            let (v1_i, v2_i) = MC_CUBE_EDGES[i];
+            let factor = interpolation_factor(nodes[v1_i].density, nodes[v2_i].density);
+            positions[i] = (volume[v1_i]
+                .position()
+                .interpolate(volume[v2_i].position(), factor)
+                * vertex_position_scale)
+                .into();
+            normals[i] = nodes[v1_i]
+                .normal
+                .interpolate(nodes[v2_i].normal, factor)
+                .into();
+        });
 
-            let mut cube_index = 0;
-            volume.iter().enumerate().for_each(|(volume_i, &key)| {
-                let mc_i = VOLUME_TO_MC_VERTEX[volume_i];
+    CellVertexData { positions, normals }
+}
 
-                if key == MortonKey::none() {
-                    // If any of the vertices of the volume are null, that means that the volume is
-                    // in the edge of the octree, and as such should not be processed since there
-                    // is not enough data to form a marching cubes mesh out of it.
-                    return;
+fn is_cell_visible(cube_index: u8) -> bool {
+    cube_index != 0 && cube_index != 0xFF
+}
+
+fn fetch_volume_information<T: McNode>(
+    volume: [MortonKey; 8],
+    octree: &HashedOctree<T>,
+) -> ([NodeData; 8], u8) {
+    const VOLUME_TO_MC_VERTEX: [usize; 8] = [3, 2, 7, 6, 0, 1, 4, 5];
+
+    let mut nodes: [MaybeUninit<NodeData>; 8] = unsafe { MaybeUninit::uninit().assume_init() };
+
+    let mut cube_index = 0;
+    volume.iter().enumerate().for_each(|(volume_i, &key)| {
+        let mc_i = VOLUME_TO_MC_VERTEX[volume_i];
+
+        if key == MortonKey::none() {
+            // If any of the vertices of the volume are null, that means that the volume is
+            // in the edge of the octree, and as such should not be processed since there
+            // is not enough data to form a marching cubes mesh out of it.
+            return;
+        }
+
+        match octree.value(key) {
+            Some(node) => {
+                let (density, normal) = (node.density(), node.normal());
+                if density > 0. {
+                    cube_index |= 1 << mc_i;
                 }
+                nodes[volume_i] = MaybeUninit::new(NodeData { density, normal });
+            }
 
-                match octree.value(key) {
-                    Some(node) => {
-                        let (density, normal) = (node.density(), node.normal());
-                        if density > 0. {
-                            cube_index |= 1 << mc_i;
-                        }
-                        nodes[volume_i] = MaybeUninit::new(NodeData { density, normal });
-                    }
+            // This node should ALWAYS exist, since the duals algorithm always returns
+            // either 0 (MortonKey::none()) or valid nodes as volume vertices.
+            None => unreachable!(),
+        }
+    });
 
-                    // This node should ALWAYS exist, since the duals algorithm always returns
-                    // either 0 (MortonKey::none()) or valid nodes as volume vertices.
-                    None => unreachable!(),
-                }
-            });
+    let nodes: [NodeData; 8] = unsafe { std::mem::transmute(nodes) };
 
-            let nodes: [NodeData; 8] = unsafe { std::mem::transmute(nodes) };
-
-            (volume, nodes, cube_index)
-        })
-        // Then, filter out volumes whose cube_index is 0 (Outside of surface) or 0xFF (Inside of
-        // surface).
-        .filter(|(_, _, cube_index)| cube_index != &0 && cube_index != &0xFF)
-        // Next, calculate the marching cubes vertex positions and normals.
-        // These values will be interpolated between the corner data fetched earlier, and as such
-        // will be in the volume edges.
-        .map(|(volume, nodes, cube_index)| {
-            let mut verts: [[f32; 3]; 12] =
-                unsafe { std::mem::MaybeUninit::uninit().assume_init() };
-            let mut norms: [[f32; 3]; 12] =
-                unsafe { std::mem::MaybeUninit::uninit().assume_init() };
-            let edges = tables::EDGE_TABLE[cube_index];
-            (0..12)
-                .into_iter()
-                .filter(|i| (edges & (1 << i)) > 0)
-                .for_each(|i| {
-                    let (v1_i, v2_i) = MC_CUBE_EDGES[i];
-                    let factor = interpolation_factor(nodes[v1_i].density, nodes[v2_i].density);
-                    verts[i] = volume[v1_i]
-                        .position()
-                        .interpolate(volume[v2_i].position(), factor)
-                        .into();
-                    norms[i] = nodes[v1_i]
-                        .normal
-                        .interpolate(nodes[v2_i].normal, factor)
-                        .into();
-                });
-            (cube_index, verts, norms)
-        })
-        // Finally, take the vertices and normals and create the appropiate triangles depending
-        // on the volume's cube index.
-        .flat_map_iter(|(cube_index, volume_vertices, volume_normals)| {
-            tables::TRI_TABLE[cube_index]
-                .chunks(3)
-                .take_while(|chunk| chunk[0] != -1)
-                .flat_map(move |chunk| {
-                    let (vtx1, vtx2, vtx3) = (
-                        Point3::from(volume_vertices[chunk[0] as usize]) * scale,
-                        Point3::from(volume_vertices[chunk[1] as usize]) * scale,
-                        Point3::from(volume_vertices[chunk[2] as usize]) * scale,
-                    );
-                    let (n1, n2, n3) = (
-                        volume_normals[chunk[0] as usize],
-                        volume_normals[chunk[1] as usize],
-                        volume_normals[chunk[2] as usize],
-                    );
-
-                    std::array::IntoIter::new([(vtx1, n1), (vtx2, n2), (vtx3, n3)]).map(
-                        move |(vtx, norm)| Vertex {
-                            position: vtx.into(),
-                            normal: norm.into(),
-                        },
-                    )
-                })
-        })
-        .collect::<Vec<_>>();
-
-    Mesh {
-        indices: (0..vertices.len() as u32).collect(),
-        vertices,
-    }
+    (nodes, cube_index)
 }
 
 /// Given two values p1 and p2, estimates a relative value R such that `p1 + (p2 - p1) * R == 0`.
